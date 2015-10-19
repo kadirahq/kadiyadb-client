@@ -1,7 +1,7 @@
 package client
 
 import (
-	"fmt"
+	"errors"
 	"sync"
 	"sync/atomic"
 
@@ -47,23 +47,20 @@ func (c *Client) read() {
 		// `msgType` is dropped. Its not important for the client
 		data, id, _, err := c.tran.ReceiveBatch()
 		if err != nil {
-			fmt.Println(err)
 			break
 		}
 
-		c.mtx.RLock()
+		c.mtx.Lock()
 		ch, ok := c.inflight[id]
-		c.mtx.RUnlock()
-
 		if !ok {
-			fmt.Println("Unknown response id")
+			c.mtx.Unlock()
 			continue
+		} else {
+			delete(c.inflight, id)
+			c.mtx.Unlock()
 		}
 
 		ch <- data
-		c.mtx.Lock()
-		delete(c.inflight, id)
-		c.mtx.Unlock()
 	}
 }
 
@@ -105,23 +102,31 @@ func (c *Client) Track(reqs []*ReqTrack) (ress []*ResTrack, err error) {
 		ress[i] = res
 
 		if err := res.Unmarshal(resData[i]); err != nil {
-			return nil, err
+			res.Error = err.Error()
+			continue
+		}
+
+		if res.Error != "" {
+			// using return value (err)
+			// final error will return
+			err = errors.New(res.Error)
 		}
 	}
 
-	return ress, nil
+	return ress, err
 }
 
 // Fetch fetches kadiyadb point data
 func (c *Client) Fetch(reqs []*ReqFetch) (ress []*ResFetch, err error) {
 	reqData := make([][]byte, len(reqs))
 	for i, req := range reqs {
+		var err error
 		if reqData[i], err = req.Marshal(); err != nil {
 			return nil, err
 		}
 	}
 
-	resData, err := c.call(reqData, MsgTypeTrack)
+	resData, err := c.call(reqData, MsgTypeFetch)
 	if err != nil {
 		return nil, err
 	}
@@ -132,9 +137,16 @@ func (c *Client) Fetch(reqs []*ReqFetch) (ress []*ResFetch, err error) {
 		ress[i] = res
 
 		if err := res.Unmarshal(resData[i]); err != nil {
-			return nil, err
+			res.Error = err.Error()
+			continue
+		}
+
+		if res.Error != "" {
+			// using return value (err)
+			// final error will return
+			err = errors.New(res.Error)
 		}
 	}
 
-	return ress, nil
+	return ress, err
 }

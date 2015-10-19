@@ -33,7 +33,7 @@ func main() {
 			var i int64
 			for i = 0; i < *size; i++ {
 				reqs = append(reqs, &client.ReqFetch{
-					Database: "kadiyadb",
+					Database: "test",
 					From:     0,
 					To:       uint64(60000000000 * 30),
 					Fields:   []string{"foo", "bar"},

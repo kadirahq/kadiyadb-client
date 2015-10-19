@@ -33,7 +33,7 @@ func main() {
 			var i int64
 			for i = 0; i < *size; i++ {
 				reqs = append(reqs, &client.ReqTrack{
-					Database: "kadiyadb",
+					Database: "test",
 					Time:     uint64(i * 60000000000),
 					Fields:   []string{"foo", "bar"},
 					Total:    3.14,

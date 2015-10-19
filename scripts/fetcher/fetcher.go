@@ -11,8 +11,8 @@ import (
 
 var (
 	addr = flag.String("addr", "localhost:8000", "Host and port of the server <host>:<port>")
-	conc = 1000
-	size = 100
+	conc = flag.Int64("conc", 1000, "Number of concurrent operations")
+	size = flag.Int64("size", 100, "Number of requests per batch")
 
 	count int64
 )
@@ -25,10 +25,13 @@ func main() {
 		panic(err)
 	}
 
-	for i := 0; i < conc; i++ {
+	var i int64
+	for i = 0; i < *conc; i++ {
 		go func() {
 			reqs := []*client.ReqFetch{}
-			for i := 0; i < size; i++ {
+
+			var i int64
+			for i = 0; i < *size; i++ {
 				reqs = append(reqs, &client.ReqFetch{
 					Database: "kadiyadb",
 					From:     0,
@@ -49,7 +52,7 @@ func main() {
 
 	for {
 		time.Sleep(time.Second)
-		log.Println(100 * count)
+		log.Println(*size * count)
 		atomic.StoreInt64(&count, 0)
 	}
 }

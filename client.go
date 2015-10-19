@@ -100,7 +100,10 @@ func (c *Client) Track(reqs []*ReqTrack) (ress []*ResTrack, err error) {
 	}
 
 	ress = make([]*ResTrack, len(reqs))
-	for i, res := range ress {
+	for i := range ress {
+		res := &ResTrack{}
+		ress[i] = res
+
 		if err := res.Unmarshal(resData[i]); err != nil {
 			return nil, err
 		}
@@ -124,7 +127,10 @@ func (c *Client) Fetch(reqs []*ReqFetch) (ress []*ResFetch, err error) {
 	}
 
 	ress = make([]*ResFetch, len(reqs))
-	for i, res := range ress {
+	for i := range ress {
+		res := &ResFetch{}
+		ress[i] = res
+
 		if err := res.Unmarshal(resData[i]); err != nil {
 			return nil, err
 		}

@@ -5,6 +5,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/kadirahq/kadiyadb-protocol"
 	"github.com/kadirahq/kadiyadb-transport"
 )
 
@@ -83,7 +84,7 @@ func (c *Client) call(b [][]byte, msgType uint8) ([][]byte, error) {
 }
 
 // Track tracks kadiyadb points
-func (c *Client) Track(reqs []*ReqTrack) (ress []*ResTrack, err error) {
+func (c *Client) Track(reqs []*protocol.ReqTrack) (ress []*protocol.ResTrack, err error) {
 	reqData := make([][]byte, len(reqs))
 	for i, req := range reqs {
 		if reqData[i], err = req.Marshal(); err != nil {
@@ -96,9 +97,9 @@ func (c *Client) Track(reqs []*ReqTrack) (ress []*ResTrack, err error) {
 		return nil, err
 	}
 
-	ress = make([]*ResTrack, len(reqs))
+	ress = make([]*protocol.ResTrack, len(reqs))
 	for i := range ress {
-		res := &ResTrack{}
+		res := &protocol.ResTrack{}
 		ress[i] = res
 
 		if err := res.Unmarshal(resData[i]); err != nil {
@@ -117,7 +118,7 @@ func (c *Client) Track(reqs []*ReqTrack) (ress []*ResTrack, err error) {
 }
 
 // Fetch fetches kadiyadb point data
-func (c *Client) Fetch(reqs []*ReqFetch) (ress []*ResFetch, err error) {
+func (c *Client) Fetch(reqs []*protocol.ReqFetch) (ress []*protocol.ResFetch, err error) {
 	reqData := make([][]byte, len(reqs))
 	for i, req := range reqs {
 		var err error
@@ -131,9 +132,9 @@ func (c *Client) Fetch(reqs []*ReqFetch) (ress []*ResFetch, err error) {
 		return nil, err
 	}
 
-	ress = make([]*ResFetch, len(reqs))
+	ress = make([]*protocol.ResFetch, len(reqs))
 	for i := range ress {
-		res := &ResFetch{}
+		res := &protocol.ResFetch{}
 		ress[i] = res
 
 		if err := res.Unmarshal(resData[i]); err != nil {

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/kadirahq/kadiyadb-client"
+	"github.com/kadirahq/kadiyadb-protocol"
 )
 
 var (
@@ -28,11 +29,11 @@ func main() {
 	var i int64
 	for i = 0; i < *conc; i++ {
 		go func() {
-			reqs := []*client.ReqFetch{}
+			reqs := []*protocol.ReqFetch{}
 
 			var i int64
 			for i = 0; i < *size; i++ {
-				reqs = append(reqs, &client.ReqFetch{
+				reqs = append(reqs, &protocol.ReqFetch{
 					Database: "test",
 					From:     0,
 					To:       uint64(60000000000 * 30),

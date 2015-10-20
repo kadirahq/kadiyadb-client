@@ -1,43 +1,58 @@
-var transport = require('kadiyadb-transport');
-var protocol = require('kadiyadb-protocol');
-var Transport = transport.Transport;
+var Protocol = require('kadiyadb-protocol').protocol;
+var Transport = require('kadiyadb-transport');
+
+function connect(url, callback) {
+	var client = new Client();
+
+	Transport.connect(url, function(err, conn) {
+		if(err) {
+			callback(err);
+			return;
+		}
+
+		client._transport = conn;
+		callback(null, client);
+		client._read();
+	});
+}
 
 function Client() {
 	this._id = 0;
 	this._inflight = {};
-	this.__read = this._read.bind(this);
 }
 
-// `connect` connects the Client to a kadiyadb server
-// callback is passed a posible error. Connection is successful if err is null
-Client.prototype.connect = function(url, callback) {
+Object.assign(Client.prototype, {
+	ERRNOCONN: new Error("not connected"),
+	TYPETRACK: 1,
+	TYPEFETCH: 2,
+});
+
+Client.prototype._call = function(type, requests, callback) {
 	var self = this;
 
-	transport.dial(url, function(err, connection){
-		if(err){
-			callback(err)
-			return
-		}
-
-		self._transport = new Transport(connection);
-		callback(null);
-
-		self.__read();
-	})
-};
-
-Client.prototype._call = function(type, encoder, requests, callback) {
-	var self = this;
+	if(!Array.isArray(requests)) {
+		requests = [requests];
+	}
 
 	if(!self._transport){
-		callback("Not connected")
-		return
+		callback(this.ERRNOCONN);
+		return;
 	}
 
 	var batch = []
 	requests.forEach(function(req){
-		var item = new encoder(req).encode().toBuffer();
-		batch.push(item);
+		switch (type) {
+			case self.TYPETRACK:
+				var item = Protocol.ReqTrack.encode(req);
+				break;
+			case self.TYPEFETCH:
+				var item = Protocol.ReqFetch.encode(req);
+				break;
+			default:
+				console.error('unknown request type', type);
+		}
+
+		batch.push(item.toBuffer());
 	})
 
 	var batchId = self._id++;
@@ -60,30 +75,33 @@ Client.prototype._read = function (argument) {
 		var resBatch = [];
     batch.forEach(function(res){
 			switch (type) {
-				case 0:
-					var item = protocol.ReqTrack.decode(res);
+				case self.TYPETRACK:
+					var item = Protocol.ResTrack.decode(res);
 					break;
-				case 1:
-					var item = protocol.ReqFetch.decode(res);
+				case self.TYPEFETCH:
+					var item = Protocol.ResFetch.decode(res);
 					break;
 				default:
-					var item = null;
+					console.error('unknown response type', type);
 			}
 
       resBatch.push(item);
     });
 
-		callback(resBatch);
-		self.__read();
+		callback(null, resBatch);
+		self._read();
 	});
 }
 
 Client.prototype.track = function(requests, callback) {
-	this._call(0, protocol.ReqTrack, requests, callback);
+	this._call(this.TYPETRACK, requests, callback);
 }
 
 Client.prototype.fetch = function(requests, callback) {
-	this._call(1, protocol.ReqFetch, requests, callback);
+	this._call(this.TYPEFETCH, requests, callback);
 };
 
-module.exports = Client;
+module.exports = {
+	Client: Client,
+	connect: connect,
+};

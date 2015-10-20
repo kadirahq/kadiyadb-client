@@ -19,9 +19,9 @@ const (
 type Client struct {
 	conn     *transport.Conn
 	tran     *transport.Transport
-	inflight map[uint64]chan [][]byte
+	inflight map[uint32]chan [][]byte
 	mtx      *sync.RWMutex
-	nextID   uint64
+	nextID   uint32
 }
 
 // New creates a new kadiyadb Client
@@ -34,7 +34,7 @@ func New(addr string) (c *Client, err error) {
 	c = &Client{
 		conn:     conn,
 		tran:     transport.New(conn),
-		inflight: make(map[uint64]chan [][]byte, 1),
+		inflight: make(map[uint32]chan [][]byte, 1),
 		mtx:      &sync.RWMutex{},
 	}
 
@@ -67,7 +67,7 @@ func (c *Client) read() {
 
 func (c *Client) call(b [][]byte, msgType uint8) ([][]byte, error) {
 	ch := make(chan [][]byte, 1)
-	id := atomic.AddUint64(&c.nextID, 1)
+	id := atomic.AddUint32(&c.nextID, 1)
 
 	c.mtx.Lock()
 	c.inflight[id] = ch

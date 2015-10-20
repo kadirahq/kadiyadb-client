@@ -3,6 +3,9 @@
   "version": "0.0.1",
   "description": "Node client for kadiyadb",
   "main": "client.js",
+  "bin": {
+    "kadiyadb": "./js-shell/index.js"
+  },
   "scripts": {
     "test": "mocha"
   },
@@ -17,6 +20,7 @@
   },
   "homepage": "https://github.com/kadirahq/kadiyadb-node#readme",
   "dependencies": {
+    "fibers": "1.0.x",
     "protobufjs": "4.0.x",
     "kadiyadb-protocol": "0.0.x",
     "kadiyadb-transport": "0.0.x"

@@ -1,4 +1,4 @@
-var Client = require('../');
+var Client = require('../../');
 
 var ADDRESS = "kdb://localhost:8000";
 var BATCH_SIZE = 100;

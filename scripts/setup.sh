@@ -1,9 +1,9 @@
 #!/bin/bash
 
 params='{
-		"duration": 10800000000000,
-		"retention": 108000000000000,
-		"resolution": 60000000000,
+		"duration": "3h",
+		"retention": "24h",
+		"resolution": "1m",
 		"maxROEpochs": 2,
 		"maxRWEpochs": 2
 }'

@@ -3,6 +3,8 @@ package main
 import (
 	"flag"
 	"log"
+	"math/rand"
+	"strconv"
 	"sync/atomic"
 	"time"
 
@@ -16,6 +18,8 @@ var (
 	size = flag.Int64("size", 100, "Number of requests per batch")
 
 	count int64
+
+	fieldSources = []string{"a", "b", "c"}
 )
 
 func main() {
@@ -29,24 +33,23 @@ func main() {
 	var i int64
 	for i = 0; i < *conc; i++ {
 		go func() {
-			reqs := []*protocol.ReqTrack{}
-
-			var i int64
-			for i = 0; i < *size; i++ {
-				reqs = append(reqs, &protocol.ReqTrack{
-					Database: "test",
-					Time:     uint64(i * 60000000000),
-					Fields:   []string{"foo", "bar"},
-					Total:    3.14,
-					Count:    1,
-				})
-			}
+			reqs := make([]*protocol.ReqTrack, *size)
 
 			for {
-				// TODO randomize all track requests
+				for i := int64(0); i < *size; i++ {
+					reqs[i] = &protocol.ReqTrack{
+						Database: "test",
+						Time:     uint64(time.Now().UnixNano()),
+						Fields:   genRandomFields(3),
+						Total:    2,
+						Count:    1,
+					}
+				}
+
 				if _, err := c.Track(reqs); err != nil {
 					panic(err)
 				}
+
 				atomic.AddInt64(&count, 1)
 			}
 		}()
@@ -57,4 +60,14 @@ func main() {
 		log.Println(*size * count)
 		atomic.StoreInt64(&count, 0)
 	}
+}
+
+func genRandomFields(size int) []string {
+	fields := make([]string, size)
+
+	for i := 0; i < size; i++ {
+		fields[i] = fieldSources[i] + strconv.Itoa(rand.Intn(100))
+	}
+
+	return fields
 }

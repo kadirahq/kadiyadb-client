@@ -23,6 +23,7 @@ function Client() {
 
 Object.assign(Client.prototype, {
 	ERRNOCONN: new Error("not connected"),
+	ERRTIMEOUT: new Error("timeout"),
 	TYPETRACK: 1,
 	TYPEFETCH: 2,
 });
@@ -34,7 +35,7 @@ Client.prototype._call = function(type, requests, callback) {
 		requests = [requests];
 	}
 
-	if(!self._transport){
+	if(!self._transport||!self._transport.connected){
 		callback(this.ERRNOCONN);
 		return;
 	}
@@ -58,6 +59,12 @@ Client.prototype._call = function(type, requests, callback) {
 	var batchId = self._id++;
 	self._inflight[batchId] = callback;
 	self._transport.WriteBatch(batchId, type, batch);
+	setTimeout(function(){
+		if(self._inflight[batchId]){
+			delete self._inflight[batchId];
+			callback(self.ERRTIMEOUT);
+		}
+	}, 5000);
 };
 
 Client.prototype._read = function (argument) {

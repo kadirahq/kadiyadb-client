@@ -18,7 +18,11 @@ Client.connect(ADDRESS, function (err, conn) {
 	}
 
   function track() {
-    conn.track(reqs, function () {
+    conn.track(reqs, function (err) {
+      if(err==conn.ERRNOCONN || err==conn.ERRTIMEOUT){
+        setTimeout(track, 500);
+        return
+      }
       counter++;
       track();
     });

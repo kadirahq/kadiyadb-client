@@ -2,7 +2,7 @@ package main
 
 import (
 	"flag"
-	"log"
+	"fmt"
 	"math/rand"
 	"strconv"
 	"sync/atomic"
@@ -13,61 +13,54 @@ import (
 )
 
 var (
-	addr = flag.String("addr", "localhost:8000", "Host and port of the server <host>:<port>")
-	conc = flag.Int64("conc", 1000, "Number of concurrent operations")
-	size = flag.Int64("size", 100, "Number of requests per batch")
+	addr = flag.String("addr", "localhost:8000", "server address <host>:<port>")
+	conc = flag.Uint64("conc", 10000, "number of concurrent operations")
+	flds = []string{"a", "b", "c"}
 
-	count int64
-
-	fieldSources = []string{"a", "b", "c"}
+	counter uint64
 )
 
 func main() {
 	flag.Parse()
 
-	c, err := client.New(*addr)
+	c, err := client.Dial(*addr)
 	if err != nil {
 		panic(err)
 	}
 
-	var i int64
-	for i = 0; i < *conc; i++ {
-		go func() {
-			reqs := make([]*protocol.ReqTrack, *size)
-
-			for {
-				for i := int64(0); i < *size; i++ {
-					reqs[i] = &protocol.ReqTrack{
-						Database: "test",
-						Time:     uint64(time.Now().UnixNano()),
-						Fields:   genRandomFields(3),
-						Total:    2,
-						Count:    1,
-					}
-				}
-
-				if _, err := c.Track(reqs); err != nil {
-					panic(err)
-				}
-
-				atomic.AddInt64(&count, 1)
-			}
-		}()
+	for i := uint64(0); i < *conc; i++ {
+		go process(c)
 	}
 
 	for {
 		time.Sleep(time.Second)
-		log.Println(*size * count)
-		atomic.StoreInt64(&count, 0)
+		fmt.Println(counter)
+		atomic.StoreUint64(&counter, 0)
 	}
 }
 
-func genRandomFields(size int) []string {
-	fields := make([]string, size)
-
-	for i := 0; i < size; i++ {
-		fields[i] = fieldSources[i] + strconv.Itoa(rand.Intn(100))
+func process(c *client.Conn) {
+	ch := make(chan bool)
+	req := &protocol.ReqTrack{
+		Database: "test",
+		Time:     uint64(time.Now().UnixNano()),
+		Fields:   make([]string, len(flds)),
+		Total:    2,
+		Count:    1,
 	}
 
-	return fields
+	for {
+		req.Time = uint64(time.Now().UnixNano())
+
+		for i := range req.Fields {
+			req.Fields[i] = flds[i] + strconv.Itoa(rand.Intn(100))
+		}
+
+		c.Track(req, func(res *protocol.ResTrack, err error) {
+			ch <- true
+		})
+
+		<-ch
+		atomic.AddUint64(&counter, 1)
+	}
 }

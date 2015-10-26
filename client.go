@@ -1,9 +1,10 @@
 package client
 
 import (
-	"errors"
+	"io"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/kadirahq/kadiyadb-protocol"
 	"github.com/kadirahq/kadiyadb-transport"
@@ -15,139 +16,116 @@ const (
 	MsgTypeFetch
 )
 
-// Client is a kadiyadb Client
-type Client struct {
-	conn     *transport.Conn
-	tran     *transport.Transport
-	inflight map[uint32]chan [][]byte
-	mtx      *sync.RWMutex
-	nextID   uint32
+// Conn ...
+type Conn struct {
+	conn       *transport.Conn
+	cbTrackMap map[uint32]CbTrack
+	cbTrackMtx *sync.Mutex
+	cbFetchMap map[uint32]CbFetch
+	cbFetchMtx *sync.Mutex
+	nextID     uint32
 }
 
-// New creates a new kadiyadb Client
-func New(addr string) (c *Client, err error) {
+// CbTrack ...
+type CbTrack func(res *protocol.ResTrack, err error)
+
+// CbFetch ...
+type CbFetch func(res *protocol.ResFetch, err error)
+
+// Dial ...
+func Dial(addr string) (c *Conn, err error) {
 	conn, err := transport.Dial(addr)
 	if err != nil {
 		return nil, err
 	}
 
-	c = &Client{
-		conn:     conn,
-		tran:     transport.New(conn),
-		inflight: make(map[uint32]chan [][]byte, 1),
-		mtx:      &sync.RWMutex{},
+	c = &Conn{
+		conn:       conn,
+		cbTrackMap: make(map[uint32]CbTrack),
+		cbTrackMtx: &sync.Mutex{},
+		cbFetchMap: make(map[uint32]CbFetch),
+		cbFetchMtx: &sync.Mutex{},
 	}
 
-	go c.read()
+	go c.recv()
+	go c.send()
 
 	return c, nil
 }
 
-func (c *Client) read() {
+// Track ...
+func (c *Conn) Track(req *protocol.ReqTrack, cb CbTrack) {
+	id := atomic.AddUint32(&c.nextID, 1)
+	c.cbTrackMtx.Lock()
+	c.cbTrackMap[id] = cb
+	c.cbTrackMtx.Unlock()
+
+	err := c.conn.Send(&protocol.Request{
+		Id:  id,
+		Req: &protocol.Request_Track{Track: req},
+	})
+
+	if err != nil {
+		c.conn.Close()
+		cb(nil, err)
+	}
+}
+
+// Fetch ...
+func (c *Conn) Fetch(req *protocol.ReqFetch, cb CbFetch) {
+	id := atomic.AddUint32(&c.nextID, 1)
+	c.cbFetchMtx.Lock()
+	c.cbFetchMap[id] = cb
+	c.cbFetchMtx.Unlock()
+
+	err := c.conn.Send(&protocol.Request{
+		Id:  id,
+		Req: &protocol.Request_Fetch{Fetch: req},
+	})
+
+	if err != nil {
+		c.conn.Close()
+		cb(nil, err)
+	}
+}
+
+func (c *Conn) send() {
 	for {
-		// `msgType` is dropped. Its not important for the client
-		data, id, _, err := c.tran.ReceiveBatch()
-		if err != nil {
+		time.Sleep(10 * time.Millisecond)
+		if err := c.conn.Flush(); err != nil {
+			c.conn.Close()
+		}
+	}
+}
+
+func (c *Conn) recv() {
+	res := &protocol.Response{}
+	for {
+		if err := c.conn.Recv(res); err != nil && err != io.EOF {
 			break
 		}
 
-		c.mtx.Lock()
-		ch, ok := c.inflight[id]
-		if !ok {
-			c.mtx.Unlock()
-			continue
-		} else {
-			delete(c.inflight, id)
-			c.mtx.Unlock()
-		}
-
-		ch <- data
-	}
-}
-
-func (c *Client) call(b [][]byte, msgType uint8) ([][]byte, error) {
-	ch := make(chan [][]byte, 1)
-	id := atomic.AddUint32(&c.nextID, 1)
-
-	c.mtx.Lock()
-	c.inflight[id] = ch
-	c.mtx.Unlock()
-
-	if err := c.tran.SendBatch(b, id, msgType); err != nil {
-		// Error during a `SendBatch` call makes the connection unusable
-		// Data sent following such an error may not be parsable
-		c.conn.Close()
-		return nil, err
-	}
-
-	return <-ch, nil
-}
-
-// Track tracks kadiyadb points
-func (c *Client) Track(reqs []*protocol.ReqTrack) (ress []*protocol.ResTrack, err error) {
-	reqData := make([][]byte, len(reqs))
-	for i, req := range reqs {
-		if reqData[i], err = req.Marshal(); err != nil {
-			return nil, err
+		switch t := res.Res.(type) {
+		case *protocol.Response_Track:
+			c.cbTrackMtx.Lock()
+			cb, ok := c.cbTrackMap[res.Id]
+			if ok {
+				delete(c.cbTrackMap, res.Id)
+				c.cbTrackMtx.Unlock()
+				cb(t.Track, nil)
+			} else {
+				c.cbTrackMtx.Unlock()
+			}
+		case *protocol.Response_Fetch:
+			c.cbFetchMtx.Lock()
+			cb, ok := c.cbFetchMap[res.Id]
+			if ok {
+				delete(c.cbFetchMap, res.Id)
+				c.cbFetchMtx.Unlock()
+				cb(t.Fetch, nil)
+			} else {
+				c.cbFetchMtx.Unlock()
+			}
 		}
 	}
-
-	resData, err := c.call(reqData, MsgTypeTrack)
-	if err != nil {
-		return nil, err
-	}
-
-	ress = make([]*protocol.ResTrack, len(reqs))
-	for i := range ress {
-		res := &protocol.ResTrack{}
-		ress[i] = res
-
-		if err := res.Unmarshal(resData[i]); err != nil {
-			res.Error = err.Error()
-			continue
-		}
-
-		if res.Error != "" {
-			// using return value (err)
-			// final error will return
-			err = errors.New(res.Error)
-		}
-	}
-
-	return ress, err
-}
-
-// Fetch fetches kadiyadb point data
-func (c *Client) Fetch(reqs []*protocol.ReqFetch) (ress []*protocol.ResFetch, err error) {
-	reqData := make([][]byte, len(reqs))
-	for i, req := range reqs {
-		var err error
-		if reqData[i], err = req.Marshal(); err != nil {
-			return nil, err
-		}
-	}
-
-	resData, err := c.call(reqData, MsgTypeFetch)
-	if err != nil {
-		return nil, err
-	}
-
-	ress = make([]*protocol.ResFetch, len(reqs))
-	for i := range ress {
-		res := &protocol.ResFetch{}
-		ress[i] = res
-
-		if err := res.Unmarshal(resData[i]); err != nil {
-			res.Error = err.Error()
-			continue
-		}
-
-		if res.Error != "" {
-			// using return value (err)
-			// final error will return
-			err = errors.New(res.Error)
-		}
-	}
-
-	return ress, err
 }

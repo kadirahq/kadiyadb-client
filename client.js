@@ -37,7 +37,6 @@ Connection.prototype.track = function(req, callback) {
     track: req,
   };
 
-  console.log('req', req);
   this._inflight[req.id] = callback;
   this._conn.send(Protocol.Request, req);
 };
@@ -99,7 +98,6 @@ Connection.prototype._read = function() {
   var self = this;
 
   this._conn.recv(Protocol.Response, function(err, res) {
-    console.log('c:res', res);
     var id = res.id || 0;
     var cb = self._inflight[id];
 

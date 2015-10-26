@@ -14,7 +14,8 @@ import (
 
 var (
 	addr = flag.String("addr", "localhost:8000", "server address <host>:<port>")
-	conc = flag.Uint64("conc", 10000, "number of concurrent operations")
+	conn = flag.Uint64("conn", 10, "number of concurrent connections")
+	conc = flag.Uint64("conc", 1000, "number of concurrent operations")
 	flds = []string{"a", "b", "c"}
 
 	counter uint64
@@ -23,19 +24,25 @@ var (
 func main() {
 	flag.Parse()
 
-	c, err := client.Dial(*addr)
-	if err != nil {
-		panic(err)
-	}
-
-	for i := uint64(0); i < *conc; i++ {
-		go process(c)
+	for i := uint64(0); i < *conn; i++ {
+		start(*conc / *conn)
 	}
 
 	for {
 		time.Sleep(time.Second)
 		fmt.Println(counter)
 		atomic.StoreUint64(&counter, 0)
+	}
+}
+
+func start(n uint64) {
+	c, err := client.Dial(*addr)
+	if err != nil {
+		panic(err)
+	}
+
+	for i := uint64(0); i < n; i++ {
+		go process(c)
 	}
 }
 

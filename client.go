@@ -18,7 +18,7 @@ const (
 
 const (
 	// FlushInterval ...
-	FlushInterval = 100 * time.Millisecond
+	FlushInterval = 10 * time.Millisecond
 )
 
 // Conn ...
@@ -28,6 +28,7 @@ type Conn struct {
 	cbTrackMtx *sync.Mutex
 	cbFetchMap map[uint32]CbFetch
 	cbFetchMtx *sync.Mutex
+	needsFlush uint32
 	nextID     uint32
 }
 
@@ -65,6 +66,7 @@ func (c *Conn) Track(req *protocol.ReqTrack, cb CbTrack) {
 	c.cbTrackMap[id] = cb
 	c.cbTrackMtx.Unlock()
 
+	atomic.StoreUint32(&c.needsFlush, 1)
 	err := c.conn.Send(&protocol.Request{
 		Id:  id,
 		Req: &protocol.Request_Track{Track: req},
@@ -83,6 +85,7 @@ func (c *Conn) Fetch(req *protocol.ReqFetch, cb CbFetch) {
 	c.cbFetchMap[id] = cb
 	c.cbFetchMtx.Unlock()
 
+	atomic.StoreUint32(&c.needsFlush, 1)
 	err := c.conn.Send(&protocol.Request{
 		Id:  id,
 		Req: &protocol.Request_Fetch{Fetch: req},
@@ -97,6 +100,9 @@ func (c *Conn) Fetch(req *protocol.ReqFetch, cb CbFetch) {
 func (c *Conn) send() {
 	for {
 		time.Sleep(FlushInterval)
+		if !atomic.CompareAndSwapUint32(&c.needsFlush, 1, 0) {
+			continue
+		}
 		if err := c.conn.Flush(); err != nil {
 			c.conn.Close()
 		}

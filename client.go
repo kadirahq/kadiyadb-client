@@ -16,6 +16,11 @@ const (
 	MsgTypeFetch
 )
 
+const (
+	// FlushInterval ...
+	FlushInterval = 100 * time.Millisecond
+)
+
 // Conn ...
 type Conn struct {
 	conn       *transport.Conn
@@ -91,7 +96,7 @@ func (c *Conn) Fetch(req *protocol.ReqFetch, cb CbFetch) {
 
 func (c *Conn) send() {
 	for {
-		time.Sleep(10 * time.Millisecond)
+		time.Sleep(FlushInterval)
 		if err := c.conn.Flush(); err != nil {
 			c.conn.Close()
 		}

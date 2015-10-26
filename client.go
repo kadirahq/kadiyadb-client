@@ -70,7 +70,7 @@ func (c *Conn) Track(req *protocol.ReqTrack, cb CbTrack) {
 	err := c.conn.Send(&protocol.Request{
 		Id:  id,
 		Req: &protocol.Request_Track{Track: req},
-	})
+	}, false)
 
 	if err != nil {
 		c.conn.Close()
@@ -89,7 +89,7 @@ func (c *Conn) Fetch(req *protocol.ReqFetch, cb CbFetch) {
 	err := c.conn.Send(&protocol.Request{
 		Id:  id,
 		Req: &protocol.Request_Fetch{Fetch: req},
-	})
+	}, true)
 
 	if err != nil {
 		c.conn.Close()

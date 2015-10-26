@@ -2,113 +2,122 @@ var Protocol = require('kadiyadb-protocol').protocol;
 var Transport = require('kadiyadb-transport');
 
 function connect(url, callback) {
-	var client = new Client();
+  var client = new Connection();
 
-	Transport.connect(url, function(err, conn) {
-		if(err) {
-			callback(err);
-			return;
-		}
+  Transport.connect(url, function(err, conn) {
+    if (err) {
+      callback(err);
+      return;
+    }
 
-		client._transport = conn;
-		callback(null, client);
-		client._read();
-	});
+    client._conn = conn;
+    callback(null, client);
+    client._read();
+  });
 }
 
-function Client() {
-	this._id = 0;
-	this._inflight = {};
+function Connection() {
+  this._conn = null;
+  this._inflight = {};
+  this._nextId = 0;
 }
 
-Object.assign(Client.prototype, {
-	ERRNOCONN: new Error("not connected"),
-	ERRTIMEOUT: new Error("timeout"),
-	TYPETRACK: 1,
-	TYPEFETCH: 2,
+Object.assign(Connection.prototype, {
+  ERRNOCONN: new Error("not connected"),
 });
 
-Client.prototype._call = function(type, requests, callback) {
-	var self = this;
+Connection.prototype.track = function(req, callback) {
+  if (!this._conn || !this._conn.connected) {
+    callback(this.ERRNOCONN);
+    return;
+  }
 
-	if(!Array.isArray(requests)) {
-		requests = [requests];
-	}
+  req = {
+    id: this._nextId++,
+    track: req,
+  };
 
-	if(!self._transport||!self._transport.connected){
-		callback(this.ERRNOCONN);
-		return;
-	}
-
-	var batch = []
-	requests.forEach(function(req){
-		switch (type) {
-			case self.TYPETRACK:
-				var item = Protocol.ReqTrack.encode(req);
-				break;
-			case self.TYPEFETCH:
-				var item = Protocol.ReqFetch.encode(req);
-				break;
-			default:
-				console.error('unknown request type', type);
-		}
-
-		batch.push(item.toBuffer());
-	})
-
-	var batchId = self._id++;
-	self._inflight[batchId] = callback;
-	self._transport.WriteBatch(batchId, type, batch);
-	setTimeout(function(){
-		if(self._inflight[batchId]){
-			delete self._inflight[batchId];
-			callback(self.ERRTIMEOUT);
-		}
-	}, 5000);
+  console.log('req', req);
+  this._inflight[req.id] = callback;
+  this._conn.send(Protocol.Request, req);
 };
 
-Client.prototype._read = function (argument) {
-	var self = this;
+Connection.prototype.trackBatch = function(reqs, callback) {
+  var todo = reqs.length;
+  var errs = [];
+  var ress = [];
 
-	self._transport.ReadBatch(function(id, type, batch){
-		var callback = self._inflight[id];
-		if(!callback) {
-			console.error("unknown message id");
-			return;
-		}
+  for (var i = 0; i < reqs.length; i++) {
+    (function(i) {
+      this.track(reqs[i], function(err, res) {
+        errs[i] = err;
+        ress[i] = res;
 
-		delete self._inflight[id];
+        if (--todo == 0) {
+          callback(errs, ress);
+        }
+      });
+    })();
+  }
+};
 
-		var resBatch = [];
-    batch.forEach(function(res){
-			switch (type) {
-				case self.TYPETRACK:
-					var item = Protocol.ResTrack.decode(res);
-					break;
-				case self.TYPEFETCH:
-					var item = Protocol.ResFetch.decode(res);
-					break;
-				default:
-					console.error('unknown response type', type);
-			}
+Connection.prototype.fetch = function(req, callback) {
+  if (!this._conn || !this._conn.connected) {
+    callback(this.ERRNOCONN);
+    return;
+  }
 
-      resBatch.push(item);
-    });
+  req = {
+    id: this._nextId++,
+    fetch: req,
+  };
 
-		callback(null, resBatch);
-		self._read();
-	});
-}
+  this._inflight[req.id] = callback;
+  this._conn.send(Protocol.Request, req);
+};
 
-Client.prototype.track = function(requests, callback) {
-	this._call(this.TYPETRACK, requests, callback);
-}
+Connection.prototype.fetchBatch = function(reqs, callback) {
+  var todo = reqs.length;
+  var errs = [];
+  var ress = [];
 
-Client.prototype.fetch = function(requests, callback) {
-	this._call(this.TYPEFETCH, requests, callback);
+  for (var i = 0; i < reqs.length; i++) {
+    (function(i) {
+      this.fetch(reqs[i], function(err, res) {
+        errs[i] = err;
+        ress[i] = res;
+
+        if (--todo == 0) {
+          callback(errs, ress);
+        }
+      });
+    })();
+  }
+};
+
+Connection.prototype._read = function() {
+  var self = this;
+
+  this._conn.recv(Protocol.Response, function(err, res) {
+    console.log('c:res', res);
+    var id = res.id || 0;
+    var cb = self._inflight[id];
+
+    if (!cb) {
+      return
+    }
+
+    if (res.track) {
+      cb(null, res.track);
+    } else if (res.fetch) {
+      cb(null, res.fetch);
+    }
+
+    self._read();
+  });
 };
 
 module.exports = {
-	Client: Client,
-	connect: connect,
+  Connection: Connection,
+  connect: connect,
 };

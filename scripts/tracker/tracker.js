@@ -1,39 +1,36 @@
 var Client = require('../../');
 
 var ADDRESS = "kdb://localhost:8000";
-var BATCH_SIZE = 100;
-var CONCURRENCY = 10;
+var CONCURRENCY = 1;
 var counter = 0;
 
-Client.connect(ADDRESS, function (err, conn) {
-  var reqs = [];
-  for(var i=0; i<BATCH_SIZE; i++){
-		reqs.push({
-      database: 'test',
-  		time: i*60000000000,
-  		total: 3.14,
-  		count: 1,
-  		fields: ['foo', 'bar']
-    })
-	}
+setInterval(function() {
+  console.log(BATCH_SIZE * counter);
+  counter = 0;
+}, 1000);
+
+Client.connect(ADDRESS, function(err, conn) {
+  var req = {
+    database: 'test',
+    time: Date.now() * 1e6,
+    total: 2,
+    count: 1,
+    fields: ['a', 'b', 'c']
+  };
 
   function track() {
-    conn.track(reqs, function (err) {
-      if(err==conn.ERRNOCONN || err==conn.ERRTIMEOUT){
+    conn.track(req, function(err) {
+      if (err) {
         setTimeout(track, 500);
         return
       }
+
       counter++;
       track();
     });
   }
 
-  for(var i=0; i<CONCURRENCY; i++) {
+  for (var i = 0; i < CONCURRENCY; i++) {
     track();
   }
 });
-
-setInterval(function () {
-  console.log(BATCH_SIZE*counter);
-  counter = 0;
-}, 1000);

@@ -42,13 +42,14 @@ Connection.prototype.track = function(req, callback) {
 };
 
 Connection.prototype.trackBatch = function(reqs, callback) {
+  var self = this;
   var todo = reqs.length;
   var errs = [];
   var ress = [];
 
   for (var i = 0; i < reqs.length; i++) {
     (function(i) {
-      this.track(reqs[i], function(err, res) {
+      self.track(reqs[i], function(err, res) {
         errs[i] = err;
         ress[i] = res;
 
@@ -76,13 +77,14 @@ Connection.prototype.fetch = function(req, callback) {
 };
 
 Connection.prototype.fetchBatch = function(reqs, callback) {
+  var self = this;
   var todo = reqs.length;
   var errs = [];
   var ress = [];
 
   for (var i = 0; i < reqs.length; i++) {
     (function(i) {
-      this.fetch(reqs[i], function(err, res) {
+      self.fetch(reqs[i], function(err, res) {
         errs[i] = err;
         ress[i] = res;
 

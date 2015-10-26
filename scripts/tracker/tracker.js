@@ -1,11 +1,11 @@
 var Client = require('../../');
 
 var ADDRESS = "kdb://localhost:8000";
-var CONCURRENCY = 1;
+var CONCURRENCY = 1000;
 var counter = 0;
 
 setInterval(function() {
-  console.log(BATCH_SIZE * counter);
+  console.log(counter);
   counter = 0;
 }, 1000);
 

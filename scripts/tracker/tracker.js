@@ -5,9 +5,9 @@ var CONCURRENCY = 1000;
 var counter = 0;
 
 setInterval(function() {
-  console.log(counter);
+  console.log(counter / 10);
   counter = 0;
-}, 1000);
+}, 10000);
 
 Client.connect(ADDRESS, function(err, conn) {
   var req = {

@@ -29,8 +29,8 @@ func main() {
 	}
 
 	for {
-		time.Sleep(time.Second)
-		fmt.Println(counter)
+		time.Sleep(10 * time.Second)
+		fmt.Println(counter / 10)
 		atomic.StoreUint64(&counter, 0)
 	}
 }
